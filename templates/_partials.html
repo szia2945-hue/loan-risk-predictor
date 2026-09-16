@@ -1,0 +1,31 @@
+{% macro auth_visual(quote_html, sub, stats) %}
+<div class="auth-visual">
+  <div class="quote">{{ quote_html|safe }}</div>
+  <div class="sub">{{ sub }}</div>
+
+  <svg width="100%" height="220" viewBox="0 0 420 220" style="max-width:420px; margin-bottom:40px;">
+    <!-- decorative ledger gauge + bars, recolors with theme via CSS vars -->
+    <g opacity="0.9">
+      <path d="M 40 190 A 70 70 0 0 1 180 190" fill="none" stroke="var(--hairline)" stroke-width="12" stroke-linecap="round"/>
+      <path d="M 40 190 A 70 70 0 0 1 145 128" fill="none" stroke="var(--blue)" stroke-width="12" stroke-linecap="round"/>
+      <line x1="110" y1="190" x2="140" y2="135" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="110" cy="190" r="5" fill="var(--ink)"/>
+      <text x="110" y="215" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="11" fill="var(--ink-dim)" letter-spacing="1">RISK GAUGE</text>
+    </g>
+    <g transform="translate(230,0)">
+      <rect x="0" y="140" width="24" height="60" rx="2" fill="var(--low)" opacity="0.85"/>
+      <rect x="34" y="100" width="24" height="100" rx="2" fill="var(--blue)" opacity="0.85"/>
+      <rect x="68" y="60" width="24" height="140" rx="2" fill="var(--accent)" opacity="0.9"/>
+      <rect x="102" y="120" width="24" height="80" rx="2" fill="var(--hairline)"/>
+      <rect x="136" y="150" width="24" height="50" rx="2" fill="var(--hairline)"/>
+      <text x="80" y="215" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="11" fill="var(--ink-dim)" letter-spacing="1">SCORE DISTRIBUTION</text>
+    </g>
+  </svg>
+
+  <div class="stat-strip">
+    {% for n, l in stats %}
+    <div><div class="n">{{ n }}</div><div class="l">{{ l }}</div></div>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}

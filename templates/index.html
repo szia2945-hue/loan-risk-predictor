@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Aegis{% endblock %}
+
+{% block content %}
+  <div class="intro">
+    <h1>Score a loan application in real time.</h1>
+    <p>Enter the applicant's financials below. A Random Forest model, trained on historical
+    repayment outcomes, returns a default probability and risk classification instantly.
+    {% if current_user.is_authenticated %}Every assessment you run is saved to your <a href="{{ url_for('history') }}">history</a>.{% endif %}</p>
+  </div>
+
+  <div class="ledger" style="display:grid; grid-template-columns:1.15fr 0.85fr; gap:1px; background:var(--hairline); border:1px solid var(--hairline);">
+    <div class="entry-sheet panel" style="border:none;">
+      <div class="sheet-label">Applicant Record</div>
+      <form id="predict-form" style="display:grid; grid-template-columns:1fr 1fr; gap:20px 24px;">
+        <div class="field">
+          <label><span class="num">01</span> Age</label>
+          <input type="number" name="age" placeholder="35" required min="18" max="100" />
+        </div>
+        <div class="field">
+          <label><span class="num">02</span> Annual Income</label>
+          <input type="number" name="income" placeholder="55000" required min="0" step="100" />
+          <span class="hint">USD, gross annual</span>
+        </div>
+        <div class="field">
+          <label><span class="num">03</span> Loan Amount</label>
+          <input type="number" name="loan_amount" placeholder="15000" required min="0" step="100" />
+        </div>
+        <div class="field">
+          <label><span class="num">04</span> Credit Score</label>
+          <input type="number" name="credit_score" placeholder="650" required min="300" max="850" />
+        </div>
+        <div class="field">
+          <label><span class="num">05</span> Employment (yrs)</label>
+          <input type="number" name="employment_years" placeholder="5" required min="0" max="60" />
+        </div>
+        <div class="field">
+          <label><span class="num">06</span> Existing Loans</label>
+          <input type="number" name="existing_loans" placeholder="1" required min="0" max="20" />
+        </div>
+        <div class="field" style="grid-column:1/-1;">
+          <label><span class="num">07</span> Debt-to-Income Ratio</label>
+          <input type="number" name="debt_to_income" placeholder="0.30" required min="0" max="2" step="0.01" />
+          <span class="hint">total monthly debt &divide; monthly income</span>
+        </div>
+
+        <div style="grid-column:1/-1; margin-top:8px; display:flex; align-items:center; gap:16px;">
+          <button type="submit" class="submit" id="submit-btn">Assess Risk</button>
+          <span style="font-family:var(--mono); font-size:12.5px; color:var(--high); display:none;" id="error-msg"></span>
+        </div>
+      </form>
+    </div>
+
+    <div class="result-sheet panel" style="border:none; display:flex; flex-direction:column;">
+      <div class="sheet-label">Assessment</div>
+      <div id="result-body" style="flex:1; display:flex; flex-direction:column;">
+        <div class="empty-state" id="placeholder">
+          <span class="glyph">&sect;</span>
+          Submit an applicant record to generate<br/>a default-probability reading.
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const form = document.getElementById('predict-form');
+const btn = document.getElementById('submit-btn');
+const errorMsg = document.getElementById('error-msg');
+const resultBody = document.getElementById('result-body');
+
+const RISK_COLOR = { Low: '#4C9A6A', Medium: '#D9A441', High: '#C1502E' };
+
+function gaugeSVG(prob, color){
+  const angle = -90 + (prob * 180);
+  const r = 80, cx = 100, cy = 100;
+  const arc = (startDeg, endDeg) => {
+    const toXY = (deg) => {
+      const rad = (deg * Math.PI) / 180;
+      return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+    };
+    const [x1,y1] = toXY(startDeg);
+    const [x2,y2] = toXY(endDeg);
+    const largeArc = endDeg - startDeg <= 180 ? 0 : 1;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
+  };
+  const needleRad = (angle * Math.PI) / 180;
+  const nx = cx + (r-14) * Math.cos(needleRad);
+  const ny = cy + (r-14) * Math.sin(needleRad);
+
+  return `
+  <svg width="220" height="130" viewBox="0 0 200 115">
+    <path d="${arc(180,360)}" fill="none" stroke="#24405F" stroke-width="14" stroke-linecap="round"/>
+    <path d="${arc(180,180+prob*180)}" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"
+      style="transition: all .6s ease"/>
+    <line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="#E9E4D8" stroke-width="2.5" stroke-linecap="round"
+      style="transition: all .6s ease"/>
+    <circle cx="${cx}" cy="${cy}" r="5" fill="#E9E4D8"/>
+  </svg>`;
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errorMsg.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Scoring…';
+
+  const data = Object.fromEntries(new FormData(form).entries());
+
+  try {
+    const res = await fetch('/predict', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json.error || 'Something went wrong.');
+    }
+
+    const prob = json.default_probability;
+    const level = json.risk_level;
+    const color = RISK_COLOR[level] || '#E9E4D8';
+    const pct = (prob * 100).toFixed(1);
+
+    resultBody.innerHTML = `
+      <div style="display:flex; flex-direction:column; align-items:center; padding:8px 0 4px;">
+        ${gaugeSVG(prob, color)}
+        <div style="font-family:var(--mono); font-size:44px; font-weight:600; margin-top:-58px; color:${color}">${pct}%</div>
+        <div style="font-family:var(--mono); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--ink-dim); margin-top:2px;">Probability of Default</div>
+        <div class="risk-pill ${level.toLowerCase()}" style="margin-top:18px;">${level} Risk</div>
+      </div>
+      <div style="margin-top:28px; border-top:1px solid var(--hairline); padding-top:18px; font-family:var(--mono); font-size:12px; color:var(--ink-dim); display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; justify-content:space-between;"><span>Model prediction</span><span style="color:var(--ink)">${json.default_prediction === 1 ? 'Likely default' : 'Likely repay'}</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>Loan amount</span><span style="color:var(--ink)">$${Number(data.loan_amount).toLocaleString()}</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>Debt-to-income</span><span style="color:var(--ink)">${data.debt_to_income}</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>Credit score</span><span style="color:var(--ink)">${data.credit_score}</span></div>
+      </div>
+    `;
+  } catch (err) {
+    errorMsg.textContent = '⚠ ' + err.message;
+    errorMsg.style.display = 'inline';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Assess Risk';
+  }
+});
+</script>
+{% endblock %}
